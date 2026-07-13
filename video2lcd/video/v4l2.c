@@ -149,46 +149,238 @@ static int V4l2InitDevice(char *strDevName, PT_VideoDevice ptVideoDevice)
      * - Streaming模式: 内核分配缓冲区 → mmap映射 → 入队 → 后续用DQBUF/QBUF轮转
      * - ReadWrite模式: 用户自己malloc缓冲区 → 后续用read()读取数据
      * ==================================================================== */
+    if (tV4l2Cap.capabilities & V4L2_CAP_STREAMING)
+    {
+        /* ---------------------------------------------------------------
+         * Streaming模式 - 阶段1: 查询并映射每个缓冲区
+         * 对每个内核分配的缓冲区:
+         *   1. VIDIOC_QUERYBUF: 查询缓冲区在内核中的偏移地址和大小
+         *   2. mmap: 将该内核缓冲区映射到用户空间, 得到用户态指针
+         * 映射后, 用户空间指针直接指向内核缓冲区, 零拷贝
+         * --------------------------------------------------------------- */
+        for (i = 0; i < ptVideoDevice->iVideoBufCnt; i++) 
+        {
+            memset(&tV4l2Buf, 0, sizeof(struct v4l2_buffer));
+            tV4l2Buf.index = i;                           /* 指定要查询第i个缓冲区 */
+            tV4l2Buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            tV4l2Buf.memory = V4L2_MEMORY_MMAP;
+
+            /* VIDIOC_QUERYBUF: 内核返回该缓冲区的length(大小)和m.offset(映射偏移) */
+            iError = ioctl(iFd, VIDIOC_QUERYBUF, &tV4l2Buf);
+            if (iError) 
+            {
+                DBG_PRINTF("Unable to query buffer.\n");
+                goto err_exit;
+            }
+
+            ptVideoDevice->iVideoBufMaxLen = tV4l2Buf.length;  /* 记录单个缓冲区大小 */
+
+            /* mmap映射: 将内核缓冲区映射到用户空间
+             * 参数说明:
+             *   - 第一个参数0: 让内核选择映射地址(起始地址)
+             *   - tV4l2Buf.length: 映射长度
+             *   - PROT_READ: 只读映射(用户空间只读, 数据由内核写入)
+             *   - MAP_SHARED: 共享映射, 内核和用户空间看到同一块物理内存
+             *   - iFd: 设备文件描述符
+             *   - tV4l2Buf.m.offset: 该缓冲区在内核中的偏移量(由QUERYBUF返回)
+             */
+            ptVideoDevice->pucVideBuf[i] = mmap(0,
+                    tV4l2Buf.length, PROT_READ, MAP_SHARED, iFd,
+                    tV4l2Buf.m.offset);//每一次偏移量都不同
+            if (ptVideoDevice->pucVideBuf[i] == MAP_FAILED) 
+            {
+                DBG_PRINTF("Unable to map buffer\n");
+                goto err_exit;
+            }
+        }        
+
+        /* ---------------------------------------------------------------
+         * Streaming模式 - 阶段2: 将所有缓冲区入队(VIDIOC_QBUF)
+         * 作用: 把映射好的缓冲区全部放入内核的"输入队列"
+         *       告诉驱动: "这些缓冲区都空着, 你可以往里面写数据了"
+         * 后续流程: 驱动采集一帧 → 放入队列 → 用户DQBUF取出 → 处理 → QBUF放回
+         * 类比: 把空盘子全部放到传菜口, 等厨师做好了端走
+         * --------------------------------------------------------------- */
+        for (i = 0; i < ptVideoDevice->iVideoBufCnt; i++) 
+        {
+            memset(&tV4l2Buf, 0, sizeof(struct v4l2_buffer));
+            tV4l2Buf.index = i;
+            tV4l2Buf.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            tV4l2Buf.memory = V4L2_MEMORY_MMAP;
+
+            /* VIDIOC_QBUF: 将第i个缓冲区入队, 交给驱动使用 */
+            iError = ioctl(iFd, VIDIOC_QBUF, &tV4l2Buf);
+            if (iError)
+            {
+                DBG_PRINTF("Unable to queue buffer.\n");
+                goto err_exit;
+            }
+        }
+        
+    }
+    else if (tV4l2Cap.capabilities & V4L2_CAP_READWRITE)
+    {
+        /* ---------------------------------------------------------------
+         * ReadWrite模式: 不使用内核缓冲区, 用户空间自己malloc
+         * 后续通过read(fd, buf, size)直接读取一帧数据到用户缓冲区
+         * 这种方式效率较低, 但不需要mmap和队列管理
+         * --------------------------------------------------------------- */
+        g_tV4l2VideoOpr.GetFrame = V4l2GetFrameForReadWrite;   /* 设置read方式的取帧函数 */
+        g_tV4l2VideoOpr.PutFrame = V4l2PutFrameForReadWrite;   /* 设置read方式的还帧函数 */
+        
+        /* ReadWrite模式只需要1个缓冲区即可, 读一帧处理一帧 */
+        ptVideoDevice->iVideoBufCnt  = 1;
+
+        /* 计算缓冲区大小: 宽 × 高 × 每像素字节数
+         * 因为不确定具体像素格式, 保守估计每像素4字节(如RGBA)
+         */
+        ptVideoDevice->iVideoBufMaxLen = ptVideoDevice->iWidth * ptVideoDevice->iHeight * 4;
+
+        /* 在用户空间分配缓冲区, 后续read()时数据写入这里 */
+        ptVideoDevice->pucVideBuf[0] = malloc(ptVideoDevice->iVideoBufMaxLen);
+    }
+
+    
+    return 0;
+    
+err_exit:    
+    close(iFd);
+    return -1;    
+}
+
+static int V4l2ExitDevice(PT_VideoDevice ptVideoDevice)
+{
+    int i;
+    for (i = 0; i < ptVideoDevice->iVideoBufCnt; i++)
+    {
+        if (ptVideoDevice->pucVideBuf[i])
+        {
+            munmap(ptVideoDevice->pucVideBuf[i], ptVideoDevice->iVideoBufMaxLen);
+            ptVideoDevice->pucVideBuf[i] = NULL;
+        }
+    }
+        
+    close(ptVideoDevice->iFd);
+    return 0;
+}
+    
+static int V4l2GetFrameForStreaming(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf)
+{
+    struct pollfd tFds[1];
+    int iRet;
+    struct v4l2_buffer tV4l2Buf;
+            
+    /* poll */
+    tFds[0].fd     = ptVideoDevice->iFd;
+    tFds[0].events = POLLIN;
+
+    iRet = poll(tFds, 1, -1);
+    if (iRet <= 0)
+    {
+        DBG_PRINTF("poll error!\n");
+        return -1;
+    }
+    
+    /* VIDIOC_DQBUF */
+    memset(&tV4l2Buf, 0, sizeof(struct v4l2_buffer));
+    tV4l2Buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    tV4l2Buf.memory = V4L2_MEMORY_MMAP;
+    iRet = ioctl(ptVideoDevice->iFd, VIDIOC_DQBUF, &tV4l2Buf);
+    if (iRet < 0) 
+    {
+    	DBG_PRINTF("Unable to dequeue buffer.\n");
+    	return -1;
+    }
+    ptVideoDevice->iVideoBufCurIndex = tV4l2Buf.index;
+
+    ptVideoBuf->iPixelFormat        = ptVideoDevice->iPixelFormat;
+    ptVideoBuf->tPixelDatas.iWidth  = ptVideoDevice->iWidth;
+    ptVideoBuf->tPixelDatas.iHeight = ptVideoDevice->iHeight;
+    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : \
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? : 0 \ 
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) : 16;
+    ptVideoBuf->tPixelDatas.iLineBytes    = ptVideoDevice->iWidth * ptVideoBuf->tPixelDatas.iBpp / 8;
+    ptVideoBuf->tPixelDatas.iTotalBytes   = tV4l2Buf->bytesused;
+    ptVideoBuf->tPixelDatas.aucPixelDatas = ptVideoDevice->pucVideBuf[tV4l2Buf.index];    
+    return 0;
 }
 
 
+static int V4l2PutFrameForStreaming(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf)
+{
+    /* VIDIOC_QBUF */
+    struct v4l2_buffer tV4l2Buf;
+    int iError;
+    
+	memset(&tV4l2Buf, 0, sizeof(struct v4l2_buffer));
+	tV4l2Buf.index  = ptVideoDevice->iVideoBufCurIndex;
+	tV4l2Buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	tV4l2Buf.memory = V4L2_MEMORY_MMAP;
+	iError = ioctl(ptVideoDevice->iFd, VIDIOC_QBUF, &tV4l2Buf);
+	if (iError) 
+    {
+	    DBG_PRINTF("Unable to queue buffer.\n");
+	    return -1;
+	}
+    return 0;
+}
+
+static int V4l2GetFrameForReadWrite(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf)
+{
+    int iRet;
+
+    iRet = read(ptVideoDevice->iFd, ptVideoDevice->pucVideBuf[0], ptVideoDevice->iVideoBufMaxLen);
+    if (iRet <= 0)
+    {
+        return -1;
+    }
+    
+    ptVideoBuf->iPixelFormat        = ptVideoDevice->iPixelFormat;
+    ptVideoBuf->tPixelDatas.iWidth  = ptVideoDevice->iWidth;
+    ptVideoBuf->tPixelDatas.iHeight = ptVideoDevice->iHeight;
+    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : \
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? : 0 \ 
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) : 16;
+    ptVideoBuf->tPixelDatas.iLineBytes    = ptVideoDevice->iWidth * ptVideoBuf->tPixelDatas.iBpp / 8;
+    ptVideoBuf->tPixelDatas.iTotalBytes   = iRet;
+    ptVideoBuf->tPixelDatas.aucPixelDatas = ptVideoDevice->pucVideBuf[0];    
+    
+    return 0;
+}
 
 
+static int V4l2PutFrameForReadWrite(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf)
+{
+    return 0;
+}
 
+static int V4l2StartDevice(PT_VideoDevice ptVideoDevice)
+{
+    int iType = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int iError;
 
+    iError = ioctl(ptVideoDevice->iFd, VIDIOC_STREAMON, &iType);
+    if (iError) 
+    {
+    	DBG_PRINTF("Unable to start capture.\n");
+    	return -1;
+    }
+    return 0;
+}
+    
+static int V4l2StopDevice(PT_VideoDevice ptVideoDevice)
+{
+    int iType = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int iError;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    iError = ioctl(ptVideoDevice->iFd, VIDIOC_STREAMOFF, &iType);
+    if (iError) 
+    {
+    	DBG_PRINTF("Unable to stop capture.\n");
+    	return -1;
+    }
+    return 0;
+}
 
 
 /* 构造一个VideoOpr结构体 */
