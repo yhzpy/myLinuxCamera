@@ -7,8 +7,8 @@
 #include <sys/mman.h>
 #include <poll.h>
 /* 流程 */
-/ 
- * VIDIOC_QUERYCAP 确定设备是否是视频捕获设备,支持哪种接口(streaming/read,write)
+
+/* VIDIOC_QUERYCAP 确定设备是否是视频捕获设备,支持哪种接口(streaming/read,write)
  * VIDIOC_ENUM_FMT 查询支持的像素格式
  * VIDIOC_S_FMT    设置摄像头使用指定格式
  * VIDIOC_REQBUFS  分配buffer
@@ -28,7 +28,7 @@
  * VIDIOC_STREAMOFF 停止设备
  *
  */
-static int g_aiSupportedFormats[] = {V4L2_PIX_FMT_YUYV, V4L2_PIX_FMT_MJPEG, V4L2_PIX_FMT_RGB565};
+static int g_aiSupportedFormats[] = {V4L2_PIX_FMT_MJPEG,V4L2_PIX_FMT_YUYV,V4L2_PIX_FMT_RGB565};
 
 static int V4l2GetFrameForReadWrite(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf);
 static int V4l2PutFrameForReadWrite(PT_VideoDevice ptVideoDevice, PT_VideoBuf ptVideoBuf);
@@ -69,10 +69,10 @@ static int V4l2InitDevice(char *strDevName, PT_VideoDevice ptVideoDevice)
     }
     ptVideoDevice->iFd = iFd;/*从这里开始不断完善设备结构体的信息*/
     memset(&tV4l2Cap,0,sizeof(struct v4l2_capability));
-    iError = ioctl(iFd, VIOIOC_QUERYCAP, &tV4l2Cap);
+    iError = ioctl(iFd, VIDIOC_QUERYCAP, &tV4l2Cap);
     if (iError)
     {
-        DBG_PRINTF("ioctl VIOIOC_QUERYCAP failed\n");
+        DBG_PRINTF("ioctl VIDIOC_QUERYCAP failed\n");
         goto err_exit;
     }
     if(!(tV4l2Cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)){
@@ -90,26 +90,26 @@ static int V4l2InitDevice(char *strDevName, PT_VideoDevice ptVideoDevice)
     tFmtDesc.index = 0;//根据不同的index 内核返回不同的格式
     tFmtDesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     while(ioctl(iFd, VIDIOC_ENUM_FMT, &tFmtDesc) == 0){
-        if(isSupportedThisFormat(tFmtDesc.pixelformat)){
+        if(isSupportThisFormat(tFmtDesc.pixelformat)){
             ptVideoDevice->iPixelFormat = tFmtDesc.pixelformat;
             break;
         }
         tFmtDesc.index++;
     }
 
-    if(ptVideoDevice->iPixelFormat == NULL){
-        DBGPRINTF("this device not support any format\n");
+    if(ptVideoDevice->iPixelFormat == 0){
+        DBG_PRINTF("this device not support any format\n");
         goto err_exit;
     }
 
     /* 设置帧格式*/
     /* set format in */
-    GetDispResolution(&iLcdWidth, &iLcdHeigt, &iLcdBpp);
+    GetDispResolution(&iLcdWidth, &iLcdHeight, &iLcdBpp);
     memset(&tV4l2Fmt, 0, sizeof(struct v4l2_format));
     tV4l2Fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     tV4l2Fmt.fmt.pix.pixelformat = ptVideoDevice->iPixelFormat;
     tV4l2Fmt.fmt.pix.width       = iLcdWidth;
-    tV4l2Fmt.fmt.pix.height      = iLcdHeigt;
+    tV4l2Fmt.fmt.pix.height      = iLcdHeight;
     tV4l2Fmt.fmt.pix.field       = V4L2_FIELD_ANY;
 
     /* 驱动程序有可能无法支持某些参数(比如分辨率),
@@ -296,11 +296,11 @@ static int V4l2GetFrameForStreaming(PT_VideoDevice ptVideoDevice, PT_VideoBuf pt
     ptVideoBuf->iPixelFormat        = ptVideoDevice->iPixelFormat;
     ptVideoBuf->tPixelDatas.iWidth  = ptVideoDevice->iWidth;
     ptVideoBuf->tPixelDatas.iHeight = ptVideoDevice->iHeight;
-    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : \
-                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? : 0 \ 
-                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) : 16;
+    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : 
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? 24 :  
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) ? 16 : 0;
     ptVideoBuf->tPixelDatas.iLineBytes    = ptVideoDevice->iWidth * ptVideoBuf->tPixelDatas.iBpp / 8;
-    ptVideoBuf->tPixelDatas.iTotalBytes   = tV4l2Buf->bytesused;
+    ptVideoBuf->tPixelDatas.iTotalBytes   = tV4l2Buf.bytesused;
     ptVideoBuf->tPixelDatas.aucPixelDatas = ptVideoDevice->pucVideBuf[tV4l2Buf.index];    
     return 0;
 }
@@ -338,9 +338,9 @@ static int V4l2GetFrameForReadWrite(PT_VideoDevice ptVideoDevice, PT_VideoBuf pt
     ptVideoBuf->iPixelFormat        = ptVideoDevice->iPixelFormat;
     ptVideoBuf->tPixelDatas.iWidth  = ptVideoDevice->iWidth;
     ptVideoBuf->tPixelDatas.iHeight = ptVideoDevice->iHeight;
-    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : \
-                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? : 0 \ 
-                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) : 16;
+    ptVideoBuf->tPixelDatas.iBpp    = (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_YUYV) ? 16 : 
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_MJPEG) ? 24 :  
+                                        (ptVideoDevice->iPixelFormat == V4L2_PIX_FMT_RGB565) ? 16 : 0;
     ptVideoBuf->tPixelDatas.iLineBytes    = ptVideoDevice->iWidth * ptVideoBuf->tPixelDatas.iBpp / 8;
     ptVideoBuf->tPixelDatas.iTotalBytes   = iRet;
     ptVideoBuf->tPixelDatas.aucPixelDatas = ptVideoDevice->pucVideBuf[0];    

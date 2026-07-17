@@ -11,9 +11,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 
@@ -49,7 +46,7 @@ int main(int argc, char *argv)
     T_VideoBuf tFrameBuf;            /* 帧缓冲区（直接映射到LCD） */
     
     int iLcdWidth;                   /* LCD宽度（像素） */
-    int iLcdHeigt;                   /* LCD高度（像素） */
+    int iLcdHeight;                  /* LCD高度（像素） */
     int iLcdBpp;                     /* LCD每像素位数（bits per pixel） */
 
     int iTopLeftX;                   /* 图像显示起始X坐标（居中计算） */
@@ -63,16 +60,24 @@ int main(int argc, char *argv)
         return -1;
     }
 
-    DisplayInit();   /*main->disp_manager注册fb驱动->fb.c 根据里面的函数注册结构体*/
+    if(DisplayInit() != 0)
+    {
+        DBG_PRINTF("DisplayInit error!\n");
+        return -1;
+    }   /*main->disp_manager注册fb驱动->fb.c 根据里面的函数注册结构体*/
 
     SelectAndInitDefaultDispDev("fb");  /*拿到display结构体 执行里面的init  和  清屏 clean*/
 
-    GetDispResolution(&iLcdWidth, &iLcdHeigt, &iLcdBpp);  /*下面俩函数和disp结构体同文件 所以main不用显式返回结构体 也能调用他们*/
+    GetDispResolution(&iLcdWidth, &iLcdHeight, &iLcdBpp);  /*下面俩函数和disp结构体同文件 所以main不用显式返回结构体 也能调用他们*/
 
     GetVideoBufForDisplay(&tFrameBuf);/*tFrameBuf有buf映射到用户区的首地址*/
     iPiexelFormatOfDisp = tFrameBuf.iPixelFormat;/*LCD的像素格式*/
 
-    VideoInit();  /*main->video_manager注册驱动->v4l2.c 根据里面的函数注册结构体 返回给video_manager 后面直接调用video_manager*/
+    if(VideoInit() != 0)
+    {
+        DBG_PRINTF("VideoInit error!\n");
+        return -1;
+    }  /*main->video_manager注册驱动->v4l2.c 根据里面的函数注册结构体 返回给video_manager 后面直接调用video_manager*/
 
     iError = VideoDeviceInit(argv[1], &tVideoDevice);  /*ioctl 填写VideoDevice数据*/
     if(iError)
@@ -81,7 +86,7 @@ int main(int argc, char *argv)
         return -1;
     }
 
-    iPixelFormatOfVideo = tVideoDevice.ptOPr->GetFormat(&tVideoDevice);
+    iPixelFormatOfVideo = tVideoDevice.iPixelFormat;
 
     VideoConvertInit();
 
@@ -134,17 +139,17 @@ int main(int argc, char *argv)
         }
 
         /* 步骤3：如果图像尺寸大于LCD分辨率，进行等比例缩放 */
-        if (ptVideoBufCur->tPixelDatas.iWidth > iLcdWidth || ptVideoBufCur->tPixelDatas.iHeight > iLcdHeigt)
+        if (ptVideoBufCur->tPixelDatas.iWidth > iLcdWidth || ptVideoBufCur->tPixelDatas.iHeight > iLcdHeight)
         {
             /* 计算缩放后的尺寸，保持原始宽高比 */
             /* 缩放策略：以LCD宽度为基准，按比例计算高度；如果高度超出则反过来计算 */
             k = (float)ptVideoBufCur->tPixelDatas.iHeight / ptVideoBufCur->tPixelDatas.iWidth;
             tZoomBuf.tPixelDatas.iWidth  = iLcdWidth;
             tZoomBuf.tPixelDatas.iHeight = iLcdWidth * k;
-            if ( tZoomBuf.tPixelDatas.iHeight > iLcdHeigt)
+            if ( tZoomBuf.tPixelDatas.iHeight > iLcdHeight)
             {
-                tZoomBuf.tPixelDatas.iWidth  = iLcdHeigt / k;
-                tZoomBuf.tPixelDatas.iHeight = iLcdHeigt;
+                tZoomBuf.tPixelDatas.iWidth  = iLcdHeight / k;
+                tZoomBuf.tPixelDatas.iHeight = iLcdHeight;
             }
             tZoomBuf.tPixelDatas.iBpp        = iLcdBpp;
             tZoomBuf.tPixelDatas.iLineBytes  = tZoomBuf.tPixelDatas.iWidth * tZoomBuf.tPixelDatas.iBpp / 8;
@@ -164,7 +169,7 @@ int main(int argc, char *argv)
         /* 步骤4：计算图像在LCD上的居中显示位置 */
         /* 将图像合并到帧缓冲区，从计算出的左上角坐标开始绘制 */
         iTopLeftX = (iLcdWidth - ptVideoBufCur->tPixelDatas.iWidth) / 2;
-        iTopLeftY = (iLcdHeigt - ptVideoBufCur->tPixelDatas.iHeight) / 2;
+        iTopLeftY = (iLcdHeight - ptVideoBufCur->tPixelDatas.iHeight) / 2;
 
         /* 将缩放后的图像数据复制到帧缓冲区的指定位置 */
         PicMerge(iTopLeftX, iTopLeftY, &ptVideoBufCur->tPixelDatas, &tFrameBuf.tPixelDatas);

@@ -271,10 +271,10 @@ int AllocVideoMem(int iNum)
  ***********************************************************************/
 PT_VideoMem GetVideoMem(int iID, int bCur)/*ID的策略还需要优化 项目没有多界面*/
 {
-    PT_VideoMem ptVideoMem = g_ptVideoMemHead;
+    PT_VideoMem ptTmp = g_ptVideoMemHead;
     while(ptTmp)
     {
-        if((ptTemp -> eVideoMemState == VMS_FREE) && (ptTemp->ePicState == iID))
+        if((ptTmp -> eVideoMemState == VMS_FREE) && (ptTmp->ePicState == iID))
         {
             ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
 			return ptTmp;
@@ -319,6 +319,7 @@ PT_VideoMem GetVideoMem(int iID, int bCur)/*ID的策略还需要优化 项目没
     }
     
 	return NULL;
+}
 /**********************************************************************
  * 函数名称: PutVideoMem
  * 功能描述: 释放使用GetVideoMem获取的VideoMem
