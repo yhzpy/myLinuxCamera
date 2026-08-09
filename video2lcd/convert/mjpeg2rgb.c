@@ -176,7 +176,7 @@ static int Mjpeg2RgbConvert(PT_VideoBuf ptVideoBufIn, PT_VideoBuf ptVideoBufOut)
 	jpeg_create_decompress(&tDInfo);
 
 	/* 设置数据源为内存中的JPEG数据 */
-    jpeg_mem_src_tj (&tDInfo, ptVideoBufIn->tPixelDatas.aucPixelDatas, ptVideoBufIn->tPixelDatas.iTotalBytes);
+    jpeg_mem_src_tj(&tDInfo, ptVideoBufIn->tPixelDatas.aucPixelDatas, ptVideoBufIn->tPixelDatas.iTotalBytes);
     
 
     /* 读取JPEG头部信息 */

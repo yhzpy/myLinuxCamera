@@ -74,7 +74,7 @@ static int FBDeviceInit(void)
      }
      g_dwScreenSize = g_tFBVar.xres * g_tFBVar.yres * g_tFBVar.bits_per_pixel / 8;
      g_pucFBMem = mmap(NULL,g_dwScreenSize, PROT_READ | PROT_WRITE, MAP_SHARED, g_fd, 0);
-     if(0> g_pucFBMem)
+     if(MAP_FAILED == g_pucFBMem)
      {
         DBG_PRINTF("mmap error \n");
         return -1;
@@ -118,7 +118,7 @@ static int FBShowPixel(int iX, int iY, unsigned int dwColor)
         DBG_PRINTF("coordinate error \n");
         return -1;
     }
-    pucFB = g_pucFBMem + iY * g_dwLinewidth + iX * g_dwPixelWidth;
+    pucFB = g_pucFBMem + iY * g_dwLineWidth + iX * g_dwPixelWidth;
     pwFB16bpp = (unsigned short *)pucFB;
     pwFB32bpp = (unsigned int *)pucFB;
 
@@ -143,7 +143,7 @@ static int FBShowPixel(int iX, int iY, unsigned int dwColor)
 		}
 		case 32:
 		{
-			*pdwFB32bpp = dwColor;
+			*pwFB32bpp = dwColor;
 			break;
 		}
 		default :
@@ -165,7 +165,7 @@ static int FBShowPixel(int iX, int iY, unsigned int dwColor)
  ***********************************************************************/
 static int FBShowPage(PT_PixelDatas ptPixelDatas)
 {
-    if(g_tFBOpr.pucDispMem != ptPixelDatas->aucPixelDates)
+    if(g_tFBOpr.pucDispMem != ptPixelDatas->aucPixelDatas)
     {
         memcpy(g_tFBOpr.pucDispMem, ptPixelDatas->aucPixelDatas, ptPixelDatas->iTotalBytes);
     }

@@ -16,9 +16,11 @@
  */
 
 /* this is not a core library module, so it doesn't define JPEG_INTERNALS */
-#include "jinclude.h"
-#include "jpeglib.h"
-#include "jerror.h"
+#include <stdio.h>
+#include <stddef.h>
+#include <string.h>
+#include <jpeglib.h>
+#include <jerror.h>
 
 
 /*
@@ -168,7 +170,7 @@ jpeg_mem_src_tj (j_decompress_ptr cinfo,
   if (cinfo->src == NULL) {	/* first time for this JPEG object? */
     cinfo->src = (struct jpeg_source_mgr *)
       (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
-				  SIZEOF(struct jpeg_source_mgr));
+				  sizeof(struct jpeg_source_mgr));
   }
 
   src = cinfo->src;

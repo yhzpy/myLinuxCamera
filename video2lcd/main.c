@@ -71,7 +71,7 @@ int main(int argc, char *argv)
     GetDispResolution(&iLcdWidth, &iLcdHeight, &iLcdBpp);  /*下面俩函数和disp结构体同文件 所以main不用显式返回结构体 也能调用他们*/
 
     GetVideoBufForDisplay(&tFrameBuf);/*tFrameBuf有buf映射到用户区的首地址*/
-    iPiexelFormatOfDisp = tFrameBuf.iPixelFormat;/*LCD的像素格式*/
+    iPixelFormatOfDisp = tFrameBuf.iPixelFormat;/*LCD的像素格式*/
 
     if(VideoInit() != 0)
     {

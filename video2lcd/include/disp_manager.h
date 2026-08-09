@@ -88,7 +88,7 @@ typedef struct DispOpr{
     int iBpp;
     int iLineWidth;
     unsigned char *pucDispMem;
-    int (*DeviceInir)(void);
+    int (*DeviceInit)(void);
     int (*ShowPixel)(int iPenX, int iPenY, unsigned int dwColor);    /* 在指定坐标画点 */
     int (*CleanScreen)(unsigned int dwBackColor);                    /* 清屏为指定颜色 */
     int (*ShowPage)(PT_PixelDatas ptPixelDatas);                     /* 显示一页数据 */

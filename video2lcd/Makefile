@@ -1,5 +1,5 @@
 
-CROSS_COMPILE = arm-linux-
+CROSS_COMPILE ?= arm-linux-gnueabihf-
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc

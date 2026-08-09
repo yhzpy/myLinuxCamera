@@ -72,3 +72,25 @@ int VideoInit(void)
 
 	return iError;
 }
+//ai加
+/**********************************************************************
+ * 函数名称： VideoDeviceInit
+ * 功能描述： 初始化摄像头设备: 选择v4l2驱动, 绑定操作接口, 并调用其InitDevice
+ * 输入参数： pcDevName - 摄像头设备节点, 如/dev/video0
+ *           ptVideoDevice - 待初始化的设备结构体
+ * 返 回 值： 0 - 成功, 其他值 - 失败
+ * *********************************************************************/
+int VideoDeviceInit(char *pcDevName, PT_VideoDevice ptVideoDevice)
+{
+    PT_VideoOpr ptVideoOpr = getVideoOpr("v4l2");
+    if(NULL == ptVideoOpr)
+    {
+        DBG_PRINTF("can not get v4l2 video opr\n");
+        return -1;
+    }
+
+    memset(ptVideoDevice, 0, sizeof(T_VideoDevice));
+    ptVideoDevice->ptOPr = ptVideoOpr;
+
+    return ptVideoOpr->InitDevice(pcDevName, ptVideoDevice);
+}

@@ -17,4 +17,7 @@
 /* Framebuffer设备路径 */
 #define FB_DEVICE_NAME "/dev/fb0"
 
+/* V4L2申请的帧缓冲区数量 */
+#define NB_BUFFER 4
+
 #endif /* _CONFIG_H */

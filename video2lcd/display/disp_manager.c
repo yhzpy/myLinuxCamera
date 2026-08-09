@@ -197,7 +197,7 @@ int AllocVideoMem(int iNum)
     PT_VideoMem ptNew;
     /* 步骤1：确定VideoMem的大小（与LCD分辨率相同） */
     GetDispResolution(&iXres, &iYres, &iBpp);
-    iVMsize = iXres * iYres * iBpp /8;
+    iVMSize = iXres * iYres * iBpp /8;
     iLineBytes = iXres * iBpp / 8;
 
     
@@ -274,7 +274,7 @@ PT_VideoMem GetVideoMem(int iID, int bCur)/*ID的策略还需要优化 项目没
     PT_VideoMem ptTmp = g_ptVideoMemHead;
     while(ptTmp)
     {
-        if((ptTmp -> eVideoMemState == VMS_FREE) && (ptTmp->ePicState == iID))
+        if((ptTmp -> eVideoMemState == VMS_FREE) && (ptTmp->iID == iID))
         {
             ptTmp->eVideoMemState = bCur ? VMS_USED_FOR_CUR : VMS_USED_FOR_PREPARE;
 			return ptTmp;
@@ -518,6 +518,4 @@ int DisplayInit(void)
 	iError = FBInit();
 
 	return iError;
-}
-
 }

@@ -1,7 +1,6 @@
 #ifndef PIC_OPERATION_H
 #define PIC_OPERATION_H
 
-#include <file.h>
 /*
  * PixelDatas结构体 - 像素数据描述
  * 作用: 统一描述一块图像数据的基本信息, 包括尺寸、色深、行字节数等
