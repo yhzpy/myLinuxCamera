@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: ""
+title: 嵌入式Linux相机视频采集与LCD显示项目
+scope:
+    - README.md
+source_files: []
+depends_on: []
+related_to: []

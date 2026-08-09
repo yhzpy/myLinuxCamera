@@ -1,0 +1,16 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+nodes_managed: true
+exported_at: "2026-08-09T16:54:23Z"
+modules:
+    "":
+        dir_name: 嵌入式Linux相机视频采集与LCD显示项目
+        title: 嵌入式Linux相机视频采集与LCD显示项目
+        scope:
+            - README.md
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
