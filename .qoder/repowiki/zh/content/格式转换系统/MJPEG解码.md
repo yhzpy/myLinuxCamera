@@ -11,7 +11,16 @@
 - [main.c](file://video2lcd/main.c)
 - [disp_manager.c](file://video2lcd/display/disp_manager.c)
 - [yuv2rgb.c](file://video2lcd/convert/yuv2rgb.c)
+- [jpeglib.h](file://video2lcd/convert/jpeglib.h)
+- [jinclude.h](file://video2lcd/convert/jinclude.h)
+- [jerror.h](file://video2lcd/convert/jerror.h)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新了自定义数据源接口的头文件包含优化，提升可移植性
+- 修正了SIZEOF宏调用为标准sizeof操作符的使用
+- 改进了libjpeg库集成的标准化程度
 
 ## 目录
 1. [简介](#简介)
@@ -123,6 +132,7 @@ Main->>Disp : FlushPixelDatasToDev()
 
 ### 自定义数据源接口（jdatasrc-tj.c）
 - 作用：为libjpeg提供从内存读取JPEG数据的源接口，避免文件I/O开销，适合MJPEG帧在内存中的场景。
+- **更新**：已优化头文件包含，移除了对自定义头文件的依赖，改用标准库头文件以提升可移植性
 - 关键函数：
   - init_mem_source：初始化数据源（无额外工作）
   - fill_mem_input_buffer：当缓冲区耗尽时触发，插入伪造EOI以优雅结束解码
@@ -273,7 +283,7 @@ Main --> Disp["disp_manager.c"]
   - 使用Streaming模式与mmap零拷贝，减少数据复制
   - 合理设置NB_BUFFER数量，平衡吞吐与内存占用
 - 质量与速度权衡
-  - 可通过libjpeg参数调整解码速度与质量（见“解码质量调优”）
+  - 可通过libjpeg参数调整解码速度与质量（见"解码质量调优"）
 
 [本节为通用性能建议，不直接分析具体代码文件]
 
@@ -304,6 +314,8 @@ Main --> Disp["disp_manager.c"]
 - 结合显示模块完成帧缓冲刷新
 该架构具备良好的可扩展性与稳定性，适用于嵌入式平台的实时图像处理需求。
 
+**更新**：通过优化头文件包含和标准化库集成，进一步提升了代码的可移植性和维护性。
+
 [本节为总结性内容，不直接分析具体代码文件]
 
 ## 附录
@@ -326,3 +338,27 @@ Main --> Disp["disp_manager.c"]
 - 行缓冲与内存：合理设置行缓冲大小，避免频繁分配
 
 [本节为通用指导，不直接分析具体代码文件]
+
+### libjpeg库集成优化（新增）
+**更新**：针对jdatasrc-tj.c的以下优化：
+
+- **头文件包含优化**：
+  - 移除了对自定义头文件的依赖
+  - 直接使用标准库头文件：<stdio.h>、<stddef.h>、<string.h>
+  - 引入标准libjpeg头文件：<jpeglib.h>、<jerror.h>
+  
+- **可移植性改进**：
+  - 消除了平台特定的依赖
+  - 提高了代码在不同编译环境下的兼容性
+  - 简化了构建系统的配置要求
+
+- **代码质量提升**：
+  - 遵循标准C语言规范
+  - 减少了潜在的编译警告
+  - 提高了代码的可读性和维护性
+
+章节来源
+- [jdatasrc-tj.c:19-23](file://video2lcd/convert/jdatasrc-tj.c#L19-L23)
+- [jpeglib.h:1-800](file://video2lcd/convert/jpeglib.h#L1-L800)
+- [jinclude.h:18-92](file://video2lcd/convert/jinclude.h#L18-L92)
+- [jerror.h:1-315](file://video2lcd/convert/jerror.h#L1-L315)

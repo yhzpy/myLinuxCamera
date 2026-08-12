@@ -3,11 +3,11 @@ schema_version: 1
 locale: zh-CN
 branch: master
 nodes_managed: true
-exported_at: "2026-08-09T16:54:23Z"
+exported_at: "2026-08-10T15:17:59Z"
 modules:
     "":
-        dir_name: 嵌入式Linux相机视频采集与LCD显示项目
-        title: 嵌入式Linux相机视频采集与LCD显示项目
+        dir_name: 嵌入式Linux相机应用（V4L2采集+Framebuffer显示）
+        title: 嵌入式Linux相机应用（V4L2采集+Framebuffer显示）
         scope:
             - README.md
         source_files: []

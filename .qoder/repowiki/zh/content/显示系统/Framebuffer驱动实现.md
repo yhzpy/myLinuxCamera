@@ -10,6 +10,12 @@
 - [main.c](file://video2lcd/main.c)
 </cite>
 
+## 更新摘要
+**所做更改**
+- 更新了FBDeviceInit初始化流程中的内存映射错误检查机制
+- 改进了mmap错误检测的可靠性，使用标准的MAP_FAILED宏进行错误判断
+- 增强了错误处理的健壮性和可移植性
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -26,7 +32,7 @@
 本技术文档围绕基于Linux Framebuffer的LCD显示实现，系统阐述设备文件操作、内存映射机制与硬件抽象层设计。重点解析FBDeviceInit初始化流程（打开/dev/fb0、ioctl获取屏幕信息、mmap内存映射）、像素操作接口FBShowPixel在不同位深(8/16/32bpp)下的颜色格式转换与坐标计算、批量显示函数FBShowPage的工作原理，以及FBCleanScreen清屏功能的优化实现。同时提供扩展新显示设备的指南、常见问题兼容性与性能优化建议及调试方法。
 
 ## 项目结构
-本项目将显示子系统以“设备抽象 + 管理器”的方式组织：
+本项目将显示子系统以"设备抽象 + 管理器"的方式组织：
 - display/fb.c：Framebuffer设备的具体实现，封装/dev/fb0访问、内存映射、画点/清屏/整页刷新等能力。
 - include/disp_manager.h：定义显示设备操作接口T_DispOpr、视频缓冲VideoMem管理、统一像素描述T_PixelDatas等。
 - display/disp_manager.c：实现显示设备注册、默认设备选择、VideoMem分配与管理、帧缓冲区适配与刷新。
@@ -43,12 +49,12 @@ B --> E["include/pic_operation.h<br/>像素描述结构"]
 C --> F["/dev/fb0<br/>内核framebuffer"]
 ```
 
-图表来源
+**图表来源**
 - [main.c:63-74](file://video2lcd/main.c#L63-L74)
 - [disp_manager.c:514-521](file://video2lcd/display/disp_manager.c#L514-L521)
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
 
-章节来源
+**章节来源**
 - [main.c:63-74](file://video2lcd/main.c#L63-L74)
 - [disp_manager.c:514-521](file://video2lcd/display/disp_manager.c#L514-L521)
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
@@ -59,7 +65,7 @@ C --> F["/dev/fb0<br/>内核framebuffer"]
 - VideoMem：用于加速显示的页面缓冲，支持设备显存直写与用户态缓冲复用。
 - FB驱动：具体实现/dev/fb0的打开、ioctl查询、mmap映射、像素写入与整页刷新。
 
-章节来源
+**章节来源**
 - [disp_manager.h:69-96](file://video2lcd/include/disp_manager.h#L69-L96)
 - [pic_operation.h:10-17](file://video2lcd/include/pic_operation.h#L10-L17)
 - [fb.c:36-43](file://video2lcd/display/fb.c#L36-L43)
@@ -93,7 +99,7 @@ DM->>FB : ShowPage(ptPixelDatas)
 FB-->>App : 完成刷新
 ```
 
-图表来源
+**图表来源**
 - [main.c:63-74](file://video2lcd/main.c#L63-L74)
 - [disp_manager.c:148-175](file://video2lcd/display/disp_manager.c#L148-L175)
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
@@ -101,10 +107,14 @@ FB-->>App : 完成刷新
 ## 详细组件分析
 
 ### FBDeviceInit初始化流程
+
+**已更新** 改进了内存映射错误检查机制，使用标准的MAP_FAILED宏进行错误检测
+
 - 打开设备：open(FB_DEVICE_NAME, O_RDWR)，其中FB_DEVICE_NAME由配置宏定义。
 - 获取屏幕信息：两次ioctl分别获取可变信息与固定信息，得到分辨率、BPP、行字节数等。
 - 计算显存大小：xres * yres * bits_per_pixel / 8。
 - 内存映射：mmap将显存映射到用户空间，得到g_pucFBMem。
+- **错误检查改进**：使用`if(MAP_FAILED == g_pucFBMem)`替代原来的`if(0> g_pucFBMem)`进行更可靠的mmap错误检测。
 - 填充接口：设置T_DispOpr中的iXres/iYres/iBpp/iLineWidth/pucDispMem，并缓存每行字节数与每像素字节数以加速后续计算。
 
 ```mermaid
@@ -115,15 +125,17 @@ IoctlVar --> |否| Err1["返回错误"]
 IoctlVar --> |是| IoctlFix["ioctl获取固定信息"]
 IoctlFix --> CalcSize["计算显存大小"]
 CalcSize --> Mmap["mmap映射显存"]
-Mmap --> FillOpr["填充T_DispOpr与内部参数"]
+Mmap --> CheckErr{"mmap返回值==MAP_FAILED?"}
+CheckErr --> |是| Err2["返回错误"]
+CheckErr --> |否| FillOpr["填充T_DispOpr与内部参数"]
 FillOpr --> End(["返回成功"])
 ```
 
-图表来源
+**图表来源**
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
 - [config.h:17-18](file://video2lcd/include/config.h#L17-L18)
 
-章节来源
+**章节来源**
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
 - [config.h:17-18](file://video2lcd/include/config.h#L17-L18)
 
@@ -151,10 +163,10 @@ Conv16 --> Done
 Write32 --> Done
 ```
 
-图表来源
+**图表来源**
 - [fb.c:106-157](file://video2lcd/display/fb.c#L106-L157)
 
-章节来源
+**章节来源**
 - [fb.c:106-157](file://video2lcd/display/fb.c#L106-L157)
 
 ### FBShowPage批量显示函数
@@ -171,10 +183,10 @@ Skip --> Done(["返回成功"])
 Copy --> Done
 ```
 
-图表来源
+**图表来源**
 - [fb.c:166-174](file://video2lcd/display/fb.c#L166-L174)
 
-章节来源
+**章节来源**
 - [fb.c:166-174](file://video2lcd/display/fb.c#L166-L174)
 
 ### FBCleanScreen清屏功能
@@ -196,10 +208,10 @@ Conv16 --> Done
 Write32 --> Done
 ```
 
-图表来源
+**图表来源**
 - [fb.c:183-240](file://video2lcd/display/fb.c#L183-L240)
 
-章节来源
+**章节来源**
 - [fb.c:183-240](file://video2lcd/display/fb.c#L183-L240)
 
 ### 显示管理器与VideoMem
@@ -241,12 +253,12 @@ class T_VideoMem {
 T_VideoMem --> T_PixelDatas : "包含"
 ```
 
-图表来源
+**图表来源**
 - [disp_manager.h:69-96](file://video2lcd/include/disp_manager.h#L69-L96)
 - [disp_manager.h:157-197](file://video2lcd/include/disp_manager.h#L157-L197)
 - [pic_operation.h:10-17](file://video2lcd/include/pic_operation.h#L10-L17)
 
-章节来源
+**章节来源**
 - [disp_manager.c:27-113](file://video2lcd/display/disp_manager.c#L27-L113)
 - [disp_manager.c:148-175](file://video2lcd/display/disp_manager.c#L148-L175)
 - [disp_manager.c:188-359](file://video2lcd/display/disp_manager.c#L188-L359)
@@ -272,12 +284,12 @@ fb --> cfg["config.h"]
 fb --> kern["linux/fb.h"]
 ```
 
-图表来源
+**图表来源**
 - [main.c:63-74](file://video2lcd/main.c#L63-L74)
 - [disp_manager.c:514-521](file://video2lcd/display/disp_manager.c#L514-L521)
 - [fb.c:9-17](file://video2lcd/display/fb.c#L9-L17)
 
-章节来源
+**章节来源**
 - [main.c:63-74](file://video2lcd/main.c#L63-L74)
 - [disp_manager.c:514-521](file://video2lcd/display/disp_manager.c#L514-L521)
 - [fb.c:9-17](file://video2lcd/display/fb.c#L9-L17)
@@ -291,8 +303,6 @@ fb --> kern["linux/fb.h"]
 - 区域清屏：使用ClearVideoMemRegion仅更新需要变更的区域，降低带宽占用。
 - 预取与多缓冲：利用VideoMem机制在用户态准备下一帧，降低卡顿。
 
-[本节为通用性能建议，不直接分析具体文件]
-
 ## 故障排查指南
 - 无法打开/dev/fb0：
   - 检查设备节点是否存在与权限是否正确。
@@ -301,6 +311,7 @@ fb --> kern["linux/fb.h"]
   - 检查FBIOGET_VSCREENINFO/FBIOGET_FSCREENINFO返回值。
   - 确认平台支持的分辨率与BPP。
 - mmap失败：
+  - **错误检查改进**：现在使用`MAP_FAILED`宏进行标准错误检测，提高错误识别准确性。
   - 检查显存大小计算是否正确。
   - 确认进程是否有足够权限与资源。
 - 显示异常：
@@ -309,16 +320,14 @@ fb --> kern["linux/fb.h"]
 - 调试输出：
   - 通过DBG_PRINTF打印关键步骤，定位问题。
 
-章节来源
+**章节来源**
 - [fb.c:53-94](file://video2lcd/display/fb.c#L53-L94)
 - [fb.c:106-157](file://video2lcd/display/fb.c#L106-L157)
 - [fb.c:183-240](file://video2lcd/display/fb.c#L183-L240)
 - [config.h:13-18](file://video2lcd/include/config.h#L13-L18)
 
 ## 结论
-本项目以清晰的抽象层实现了基于Linux Framebuffer的LCD显示：通过T_DispOpr统一接口屏蔽底层差异，借助mmap实现高效的显存访问，并提供像素级与页面级的操作能力。FBDeviceInit完成设备打开、信息查询与内存映射；FBShowPixel支持多BPP的颜色转换；FBShowPage与FBCleanScreen提供高效的批量更新与清屏。结合VideoMem管理，可进一步提升显示性能与稳定性。
-
-[本节为总结性内容，不直接分析具体文件]
+本项目以清晰的抽象层实现了基于Linux Framebuffer的LCD显示：通过T_DispOpr统一接口屏蔽底层差异，借助mmap实现高效的显存访问，并提供像素级与页面级的操作能力。FBDeviceInit完成设备打开、信息查询与内存映射；FBShowPixel支持多BPP的颜色转换；FBShowPage与FBCleanScreen提供高效的批量更新与清屏。**最新的错误检查改进使用标准的MAP_FAILED宏进行mmap错误检测，显著提高了错误处理的可靠性和可移植性**。结合VideoMem管理，可进一步提升显示性能与稳定性。
 
 ## 附录
 
@@ -331,12 +340,11 @@ fb --> kern["linux/fb.h"]
   - 确保BPP与像素格式匹配（16bpp RGB565，32bpp RGB32）。
   - 正确计算行字节数与像素地址偏移。
   - 处理不同平台的ioctl与内存映射差异。
+  - **使用标准的MAP_FAILED宏进行mmap错误检测，确保跨平台兼容性**。
 - 常见问题解决：
   - 坐标越界：增加边界检查。
   - 颜色格式不一致：在转换层统一为LCD所需格式。
   - 性能瓶颈：优先批量更新，减少细粒度写入。
-
-[本节为概念性指导，不直接分析具体文件]
 
 ### 关键流程参考
 - 初始化与选择默认设备：
