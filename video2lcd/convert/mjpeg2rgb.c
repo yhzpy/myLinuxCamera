@@ -66,7 +66,7 @@ static void MyErrorExit(j_common_ptr ptCInfo)
     (*ptCInfo->err->format_message) (ptCInfo, errStr);
     DBG_PRINTF("%s\n", errStr);
 
-	longjmp(ptMyErr->setjmp_buffer, 1);
+	longjmp(ptMyErr->setjmp_buffer, 1);//跳转回存档点
 }
 
 /**********************************************************************
@@ -155,7 +155,8 @@ static int Mjpeg2RgbConvert(PT_VideoBuf ptVideoBufIn, PT_VideoBuf ptVideoBufOut)
 	/* 设置错误处理 */
 	tDInfo.err               = jpeg_std_error(&tJerr.pub);
 	tJerr.pub.error_exit     = MyErrorExit;
-
+//error_exit 就是 libjpeg 出错时会调用的函数。原本它指向"打印错误+exit"，
+//现在被我们替换成 MyErrorExit。
 	/* 设置错误恢复点 */
 	if(setjmp(tJerr.setjmp_buffer))
 	{
